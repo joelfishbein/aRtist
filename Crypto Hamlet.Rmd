@@ -1,0 +1,156 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# City drawing with trees
+
+TODO:
+- clean up/rewrite code
+- center the plot
+- add a market square
+- generate values for different attributes:
+-- Population
+-- Market day
+-- Primary industry
+- add background colors
+- let ETH prices drive algorithm
+--- bigger gain = higher income
+--- higher income -> higher density, higher income industry
+- climate?
+- river?
+- forest?
+
+```{r}
+# Packages
+
+#install.packages("remotes")
+#remotes::install_github("marcusvolz/mathart")
+
+library(mathart)
+library(tidyverse)
+library(tweenr) # something to do with animation
+library(viridis)# Make reproducible
+```
+
+```{r}
+
+set.seed(47)
+
+# Parameters
+n <- 1000 # iterations
+r <- 50 # neighborhood density....lower values -> more dense
+
+# canvs
+width <- 10000 # canvas width
+height <- 10000 # canvas height
+
+# branching parameters
+delta <- 2 * pi / 180 # angle direction noise
+p_branch <- 1/10 # probability of branching
+initial_pts <- 1 # number of initial points
+nframes <- 500 # number of tweenr frames
+
+# Initialise data frames
+points <- data.frame(x = numeric(n), 
+                 y = numeric(n), 
+                 dir = numeric(n), 
+                 level = integer(n))
+
+edges <-  data.frame(x = numeric(n), 
+                 y = numeric(n), 
+                 xend = numeric(n), 
+                 yend = numeric(n), 
+                 level = integer(n))
+
+
+# select starting points for the neighborhoods
+# if(initial_pts > 1) {
+#   i <- 2
+#   while(i <= initial_pts) {
+#     points[i, ] <- c(runif(1, 0, width), runif(1, 0, height), runif(1, -2*pi, 2*pi), 1)
+#     i <- i + 1
+#   }
+# }
+
+t0 <- Sys.time()
+
+# Main loop ----
+i <- initial_pts + 1
+
+while (i <= n) {
+  valid <- FALSE
+  while (!valid) {
+    
+    # Pick a point at random
+    random_point <- sample_n(points[seq(1:(i-1)), ], 1) 
+    
+    # determine whether to branch or not
+    branch <- ifelse(runif(1, 0, 1) <= p_branch, TRUE, FALSE)
+    
+    # starting direction + ??
+    # will return INF if branch == FALSE
+    alpha <- random_point$dir[1] + 
+      runif(1, -(delta), delta) + 
+      (branch * (ifelse(runif(1, 0, 1) < 0.5, -1, 1) * pi/2))
+    
+    # Create directional vector for the branch to move in
+    # if branch == FALSE, v will be [Inf, Inf]
+    v <- c(cos(alpha), sin(alpha)) * r * (1 + 1 / ifelse(branch, random_point$level[1]+1, random_point$level[1])) 
+    
+    
+    # update where the random point moves to
+    xj <- random_point$x[1] + v[1] #original location plus movement in x direction
+    yj <- random_point$y[1] + v[2] # original location plus movement in y direction
+    
+    # update level - what is this?
+    lvl <- random_point$level[1]
+    lvl_new <- ifelse(branch, lvl+1, lvl)
+    
+    # end iteration if the point to move to is out of bounds
+    if(xj < 0 | xj > width | yj < 0 | yj > height) {
+      next
+    }
+    
+    # compute the distance to move
+    points_dist <- points %>% mutate(d = sqrt((xj - x)^2 + (yj - y)^2))
+    
+    # if the minimum distance is greater than r, the "neighborhood" (density?)
+    # then update point i and edge i to reflect the new addition of an edge and point
+    if (min(points_dist$d) >= 1 * r) {
+      points[i, ] <- c(xj, yj, alpha, lvl_new)
+      edges[i, ] <- c(xj, yj, random_point$x[1], random_point$y[1], lvl_new)
+      # Add a building if possible
+      
+      # I think building doesn't do anything at the moment
+      buiding <- 1
+      
+      
+      valid <- TRUE
+    }
+  }
+  
+  # print count and then update it
+  print(i)
+  i <- i + 1
+
+}
+
+edges <- edges %>% filter(level > 0)
+
+sand <- data.frame(alpha = numeric(0), x = numeric(0), y = numeric(0))
+
+perp <- data.frame(x = numeric(0), y = numeric(0), xend = numeric(0), yend = numeric(0))# Create plot
+
+ggplot() +
+  geom_segment(aes(x, y, xend = xend, yend = yend, size = -level), edges, lineend = "round") +
+  xlim(0, 10000) +
+  ylim(0, 10000) +
+  coord_equal() +
+  scale_size_continuous(range = c(0.5, 0.5)) +
+  #scale_color_viridis() +
+  theme_blankcanvas(bg_col = "#fafafa", margin_cm = 0)# print plot
+
+
+```
+
